@@ -1,4 +1,9 @@
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
+import { provideHttpClientTesting } from '@angular/common/http/testing'
 import { ComponentFixture, TestBed } from '@angular/core/testing'
+import { By } from '@angular/platform-browser'
+import { NgxBootstrapIconsModule, allIcons } from 'ngx-bootstrap-icons'
+import { LogoComponent } from '../common/logo/logo.component'
 import { NotFoundComponent } from './not-found.component'
 
 describe('NotFoundComponent', () => {
@@ -7,7 +12,15 @@ describe('NotFoundComponent', () => {
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      declarations: [NotFoundComponent],
+      imports: [
+        NgxBootstrapIconsModule.pick(allIcons),
+        NotFoundComponent,
+        LogoComponent,
+      ],
+      providers: [
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
+      ],
     }).compileComponents()
 
     fixture = TestBed.createComponent(NotFoundComponent)
@@ -18,6 +31,7 @@ describe('NotFoundComponent', () => {
 
   it('should create component', () => {
     expect(component).toBeTruthy()
-    expect(fixture.nativeElement.textContent).toContain('404 Not Found')
+    expect(fixture.nativeElement.textContent).toContain('Not Found')
+    expect(fixture.debugElement.queryAll(By.css('a'))).toHaveLength(1)
   })
 })
