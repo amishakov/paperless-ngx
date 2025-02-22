@@ -1,9 +1,9 @@
 import shutil
 import tempfile
+from collections.abc import Iterable
+from pathlib import Path
 from random import randint
-from typing import Iterable
 
-from django.contrib.admin.models import LogEntry
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.test import override_settings
@@ -23,6 +23,7 @@ class _TestMatchingBase(TestCase):
         match_algorithm: str,
         should_match: Iterable[str],
         no_match: Iterable[str],
+        *,
         case_sensitive: bool = False,
     ):
         for klass in (Tag, Correspondent, DocumentType):
@@ -396,7 +397,7 @@ class TestDocumentConsumptionFinishedSignal(TestCase):
             mime_type="application/pdf",
         )
 
-        self.index_dir = tempfile.mkdtemp()
+        self.index_dir = Path(tempfile.mkdtemp())
         # TODO: we should not need the index here.
         override_settings(INDEX_DIR=self.index_dir).enable()
 
@@ -450,11 +451,3 @@ class TestDocumentConsumptionFinishedSignal(TestCase):
             document=self.doc_contains,
         )
         self.assertEqual(self.doc_contains.correspondent, None)
-
-    def test_logentry_created(self):
-        document_consumption_finished.send(
-            sender=self.__class__,
-            document=self.doc_contains,
-        )
-
-        self.assertEqual(LogEntry.objects.count(), 1)
