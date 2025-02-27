@@ -1,18 +1,22 @@
 import hashlib
 import logging
+import uuid
 from collections import defaultdict
 from pathlib import Path
 from typing import Final
 
+from celery import states
 from django.conf import settings
+from django.utils import timezone
 from tqdm import tqdm
 
 from documents.models import Document
+from documents.models import PaperlessTask
 
 
 class SanityCheckMessages:
     def __init__(self):
-        self._messages = defaultdict(list)
+        self._messages: dict[int, list[dict]] = defaultdict(list)
         self.has_error = False
         self.has_warning = False
 
@@ -34,7 +38,7 @@ class SanityCheckMessages:
             logger.info("Sanity checker detected no issues.")
         else:
             # Query once
-            all_docs = Document.objects.all()
+            all_docs = Document.global_objects.all()
 
             for doc_pk in self._messages:
                 if doc_pk is not None:
@@ -57,7 +61,17 @@ class SanityCheckFailedException(Exception):
     pass
 
 
-def check_sanity(progress=False) -> SanityCheckMessages:
+def check_sanity(*, progress=False, scheduled=True) -> SanityCheckMessages:
+    paperless_task = PaperlessTask.objects.create(
+        task_id=uuid.uuid4(),
+        type=PaperlessTask.TaskType.SCHEDULED_TASK
+        if scheduled
+        else PaperlessTask.TaskType.MANUAL_TASK,
+        task_name=PaperlessTask.TaskName.CHECK_SANITY,
+        status=states.STARTED,
+        date_created=timezone.now(),
+        date_started=timezone.now(),
+    )
     messages = SanityCheckMessages()
 
     present_files = {
@@ -68,7 +82,7 @@ def check_sanity(progress=False) -> SanityCheckMessages:
     if lockfile in present_files:
         present_files.remove(lockfile)
 
-    for doc in tqdm(Document.objects.all(), disable=not progress):
+    for doc in tqdm(Document.global_objects.all(), disable=not progress):
         # Check sanity of the thumbnail
         thumbnail_path: Final[Path] = Path(doc.thumbnail_path).resolve()
         if not thumbnail_path.exists() or not thumbnail_path.is_file():
@@ -142,4 +156,11 @@ def check_sanity(progress=False) -> SanityCheckMessages:
     for extra_file in present_files:
         messages.warning(None, f"Orphaned file in media dir: {extra_file}")
 
+    paperless_task.status = states.SUCCESS if not messages.has_error else states.FAILURE
+    # result is concatenated messages
+    paperless_task.result = f"{len(messages)} issues found."
+    if messages.has_error:
+        paperless_task.result += " Check logs for details."
+    paperless_task.date_done = timezone.now()
+    paperless_task.save(update_fields=["status", "result", "date_done"])
     return messages
