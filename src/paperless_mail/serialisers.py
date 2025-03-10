@@ -8,13 +8,13 @@ from paperless_mail.models import MailAccount
 from paperless_mail.models import MailRule
 
 
-class ObfuscatedPasswordField(serializers.Field):
+class ObfuscatedPasswordField(serializers.CharField):
     """
     Sends *** string instead of password in the clear
     """
 
-    def to_representation(self, value):
-        return "*" * len(value)
+    def to_representation(self, value) -> str:
+        return "*" * max(10, len(value))
 
     def to_internal_value(self, data):
         return data
@@ -25,7 +25,6 @@ class MailAccountSerializer(OwnedObjectSerializer):
 
     class Meta:
         model = MailAccount
-        depth = 1
         fields = [
             "id",
             "name",
@@ -36,6 +35,12 @@ class MailAccountSerializer(OwnedObjectSerializer):
             "password",
             "character_set",
             "is_token",
+            "owner",
+            "user_can_change",
+            "permissions",
+            "set_permissions",
+            "account_type",
+            "expiration",
         ]
 
     def update(self, instance, validated_data):
@@ -67,17 +72,18 @@ class MailRuleSerializer(OwnedObjectSerializer):
 
     class Meta:
         model = MailRule
-        depth = 1
         fields = [
             "id",
             "name",
             "account",
+            "enabled",
             "folder",
             "filter_from",
             "filter_to",
             "filter_subject",
             "filter_body",
-            "filter_attachment_filename",
+            "filter_attachment_filename_include",
+            "filter_attachment_filename_exclude",
             "maximum_age",
             "action",
             "action_parameter",
@@ -86,9 +92,15 @@ class MailRuleSerializer(OwnedObjectSerializer):
             "assign_correspondent_from",
             "assign_correspondent",
             "assign_document_type",
+            "assign_owner_from_rule",
             "order",
             "attachment_type",
             "consumption_scope",
+            "pdf_layout",
+            "owner",
+            "user_can_change",
+            "permissions",
+            "set_permissions",
         ]
 
     def update(self, instance, validated_data):

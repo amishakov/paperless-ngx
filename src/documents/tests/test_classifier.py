@@ -1,5 +1,5 @@
-import os
 import re
+import shutil
 from pathlib import Path
 from unittest import mock
 
@@ -414,7 +414,7 @@ class TestClassifier(DirectoriesMixin, TestCase):
         )
         doc2 = Document.objects.create(
             title="doc2",
-            content="this is a document from noone",
+            content="this is a document from no one",
             checksum="B",
         )
 
@@ -616,7 +616,7 @@ class TestClassifier(DirectoriesMixin, TestCase):
         self.assertListEqual(self.classifier.predict_tags(doc2.content), [])
 
     def test_load_classifier_not_exists(self):
-        self.assertFalse(os.path.exists(settings.MODEL_FILE))
+        self.assertFalse(Path(settings.MODEL_FILE).exists())
         self.assertIsNone(load_classifier())
 
     @mock.patch("documents.classifier.DocumentClassifier.load")
@@ -631,7 +631,7 @@ class TestClassifier(DirectoriesMixin, TestCase):
         },
     )
     @override_settings(
-        MODEL_FILE=os.path.join(os.path.dirname(__file__), "data", "model.pickle"),
+        MODEL_FILE=(Path(__file__).parent / "data" / "model.pickle").as_posix(),
     )
     @pytest.mark.skip(
         reason="Disabled caching due to high memory usage - need to investigate.",
@@ -647,17 +647,50 @@ class TestClassifier(DirectoriesMixin, TestCase):
     @mock.patch("documents.classifier.DocumentClassifier.load")
     def test_load_classifier_incompatible_version(self, load):
         Path(settings.MODEL_FILE).touch()
-        self.assertTrue(os.path.exists(settings.MODEL_FILE))
+        self.assertTrue(Path(settings.MODEL_FILE).exists())
 
-        load.side_effect = IncompatibleClassifierVersionError()
+        load.side_effect = IncompatibleClassifierVersionError("Dummy Error")
         self.assertIsNone(load_classifier())
-        self.assertFalse(os.path.exists(settings.MODEL_FILE))
+        self.assertFalse(Path(settings.MODEL_FILE).exists())
 
     @mock.patch("documents.classifier.DocumentClassifier.load")
     def test_load_classifier_os_error(self, load):
         Path(settings.MODEL_FILE).touch()
-        self.assertTrue(os.path.exists(settings.MODEL_FILE))
+        self.assertTrue(Path(settings.MODEL_FILE).exists())
 
         load.side_effect = OSError()
         self.assertIsNone(load_classifier())
-        self.assertTrue(os.path.exists(settings.MODEL_FILE))
+        self.assertTrue(Path(settings.MODEL_FILE).exists())
+
+    def test_load_old_classifier_version(self):
+        shutil.copy(
+            Path(__file__).parent / "data" / "v1.17.4.model.pickle",
+            self.dirs.scratch_dir,
+        )
+        with override_settings(
+            MODEL_FILE=self.dirs.scratch_dir / "v1.17.4.model.pickle",
+        ):
+            classifier = load_classifier()
+            self.assertIsNone(classifier)
+
+    @mock.patch("documents.classifier.DocumentClassifier.load")
+    def test_load_classifier_raise_exception(self, mock_load):
+        Path(settings.MODEL_FILE).touch()
+        mock_load.side_effect = IncompatibleClassifierVersionError("Dummy Error")
+        with self.assertRaises(IncompatibleClassifierVersionError):
+            load_classifier(raise_exception=True)
+
+        Path(settings.MODEL_FILE).touch()
+        mock_load.side_effect = ClassifierModelCorruptError()
+        with self.assertRaises(ClassifierModelCorruptError):
+            load_classifier(raise_exception=True)
+
+        Path(settings.MODEL_FILE).touch()
+        mock_load.side_effect = OSError()
+        with self.assertRaises(OSError):
+            load_classifier(raise_exception=True)
+
+        Path(settings.MODEL_FILE).touch()
+        mock_load.side_effect = Exception()
+        with self.assertRaises(Exception):
+            load_classifier(raise_exception=True)
