@@ -1,94 +1,71 @@
-import {
-  TestBed,
-  discardPeriodicTasks,
-  fakeAsync,
-  flush,
-} from '@angular/core/testing'
-import { ToastService } from 'src/app/services/toast.service'
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
+import { provideHttpClientTesting } from '@angular/common/http/testing'
+import { ComponentFixture, TestBed } from '@angular/core/testing'
+import { NgxBootstrapIconsModule, allIcons } from 'ngx-bootstrap-icons'
+import { Subject } from 'rxjs'
+import { Toast, ToastService } from 'src/app/services/toast.service'
 import { ToastsComponent } from './toasts.component'
-import { ComponentFixture } from '@angular/core/testing'
-import { HttpClientTestingModule } from '@angular/common/http/testing'
-import { of } from 'rxjs'
-import { NgbModule } from '@ng-bootstrap/ng-bootstrap'
+
+const toast = {
+  content: 'Error 2 content',
+  delay: 5000,
+  error: {
+    url: 'https://example.com',
+    status: 500,
+    statusText: 'Internal Server Error',
+    message: 'Internal server error 500 message',
+    error: { detail: 'Error 2 message details' },
+  },
+}
 
 describe('ToastsComponent', () => {
   let component: ToastsComponent
   let fixture: ComponentFixture<ToastsComponent>
   let toastService: ToastService
+  let toastSubject: Subject<Toast> = new Subject()
 
   beforeEach(async () => {
     TestBed.configureTestingModule({
-      declarations: [ToastsComponent],
-      imports: [HttpClientTestingModule, NgbModule],
+      imports: [ToastsComponent, NgxBootstrapIconsModule.pick(allIcons)],
       providers: [
-        {
-          provide: ToastService,
-          useValue: {
-            getToasts: () =>
-              of([
-                {
-                  title: 'Title',
-                  content: 'content',
-                  delay: 5000,
-                },
-                {
-                  title: 'Error',
-                  content: 'Error content',
-                  delay: 5000,
-                  error: new Error('Error message'),
-                },
-              ]),
-          },
-        },
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting(),
       ],
     }).compileComponents()
 
     fixture = TestBed.createComponent(ToastsComponent)
-    component = fixture.componentInstance
-
     toastService = TestBed.inject(ToastService)
+    jest.replaceProperty(toastService, 'showToast', toastSubject)
+
+    component = fixture.componentInstance
 
     fixture.detectChanges()
   })
 
-  it('should call getToasts and return toasts', fakeAsync(() => {
-    const spy = jest.spyOn(toastService, 'getToasts').mockReset()
+  it('should create', () => {
+    expect(component).toBeTruthy()
+  })
 
-    component.ngOnInit()
-    fixture.detectChanges()
+  it('should close toast', () => {
+    component.toasts = [toast]
+    const closeToastSpy = jest.spyOn(toastService, 'closeToast')
+    component.closeToast()
+    expect(component.toasts).toEqual([])
+    expect(closeToastSpy).toHaveBeenCalledWith(toast)
+  })
 
-    expect(spy).toHaveBeenCalled()
-    expect(component.toasts).toContainEqual({
-      title: 'Title',
-      content: 'content',
-      delay: 5000,
-    })
-
+  it('should unsubscribe', () => {
+    const unsubscribeSpy = jest.spyOn(
+      (component as any).subscription,
+      'unsubscribe'
+    )
     component.ngOnDestroy()
-    flush()
-    discardPeriodicTasks()
-  }))
+    expect(unsubscribeSpy).toHaveBeenCalled()
+  })
 
-  it('should show a toast', fakeAsync(() => {
+  it('should subscribe to toastService', () => {
     component.ngOnInit()
-    fixture.detectChanges()
-
-    expect(fixture.nativeElement.textContent).toContain('Title')
-
-    component.ngOnDestroy()
-    flush()
-    discardPeriodicTasks()
-  }))
-
-  it('should show an error if given with toast', fakeAsync(() => {
-    component.ngOnInit()
-    fixture.detectChanges()
-
-    expect(fixture.nativeElement.querySelector('details')).not.toBeNull()
-    expect(fixture.nativeElement.textContent).toContain('Error message')
-
-    component.ngOnDestroy()
-    flush()
-    discardPeriodicTasks()
-  }))
+    toastSubject.next(toast)
+    expect(component.toasts).toEqual([toast])
+  })
 })
